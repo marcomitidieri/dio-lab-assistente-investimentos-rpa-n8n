@@ -1,0 +1,242 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "18c8db4c-f673-4c8e-8229-a94845e4f090",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        -688,
+        -624
+      ],
+      "webhookId": "826cabd5-df7d-43d1-87a3-45e3f60004ee"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {}
+      },
+      "id": "eaeaf466-7ba7-4ea5-bc24-91480606a462",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -416,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "\n# Obtém o CSV do primeiro item de entrada\nitem = _items[0][\"json\"]\ncsv_text = item[\"data\"]\n\n# Separa as linhas e remove linhas vazias\nlines = [line.strip() for line in csv_text.splitlines() if line.strip()]\n\n# Extrai os cabeçalhos\nheaders = [h.strip() for h in lines[0].split(\",\")]\n\ninvestimentos = []\n\n# Processa as linhas, ignorando o cabeçalho\nfor line in lines[1:]:\n    cols = [c.strip() for c in line.split(\",\")]\n\n    obj = {}\n    for i, header in enumerate(headers):\n        obj[header] = cols[i] if i < len(cols) else \"\"\n\n    # Converte minimo para inteiro, sem importar módulos\n    minimo_texto = \"\".join(\n        c for c in str(obj.get(\"minimo\", \"\")) if c.isdigit()\n    )\n    obj[\"minimo\"] = int(minimo_texto) if minimo_texto else 0\n\n    investimentos.append(obj)\n\nreturn [{\"json\": {\"investimentos\": investimentos}}]\n"
+      },
+      "id": "f07cf3e7-d682-4fd9-92b7-5b5c16378cc3",
+      "name": "Code in Python",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "232baa75-a844-4e8d-94de-a632a79509b9",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -16,
+        -608
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "\n# Obtém os dados do Merge\ndados = _items[0][\"json\"]\n\nclientes = dados[\"body\"][\"clientes\"]\ninvestimentos = dados[\"investimentos\"]\n\nresultados = []\n\n# Converte saldo em formato brasileiro para número\ndef converter_saldo(saldo_texto):\n    valor = str(saldo_texto).replace(\"R$\", \"\").strip()\n    valor = valor.replace(\".\", \"\").replace(\",\", \".\")\n    return float(valor)\n\n# Formata valores no padrão brasileiro: 12.500,00\ndef formatar_moeda(valor):\n    return format(valor, \",.2f\").replace(\",\", \"X\").replace(\".\", \",\").replace(\"X\", \".\")\n\n# Percorre cada cliente\nfor cliente in clientes:\n    saldo_texto = cliente[\"saldo\"]\n    saldo_num = converter_saldo(saldo_texto)\n    perfil_cliente = cliente[\"perfil\"]\n\n    # Procura os investimentos do mesmo perfil\n    for investimento in investimentos:\n        if investimento[\"perfil\"] != perfil_cliente:\n            continue\n\n        minimo = investimento[\"minimo\"]\n\n        # Verifica se o saldo atende ao investimento mínimo\n        habilitado = \"sim\" if saldo_num >= minimo else \"não\"\n\n        # Monta a mensagem conforme a disponibilidade financeira\n        if habilitado == \"sim\":\n            mensagem = (\n                f\"Olá {cliente['nome']}! Pelo seu perfil \"\n                f\"({perfil_cliente}), uma boa opção de investimento é \"\n                f\"{investimento['produto']}, com o mínimo de \"\n                f\"R$ {formatar_moeda(minimo)}. \"\n                f\"Com seu saldo de {saldo_texto}, você consegue investir. \"\n                f\"Rentabilidade: {investimento['rentabilidade']}.\"\n            )\n        else:\n            mensagem = (\n                f\"Olá {cliente['nome']}! Pelo seu perfil \"\n                f\"({perfil_cliente}), uma opção de investimento é \"\n                f\"{investimento['produto']}, com o mínimo de \"\n                f\"R$ {formatar_moeda(minimo)}. \"\n                f\"Seu saldo atual é {saldo_texto}, portanto ainda não \"\n                f\"atinge o mínimo necessário para esse investimento. \"\n                f\"Rentabilidade: {investimento['rentabilidade']}.\"\n            )\n\n        # Cria um resultado para cada recomendação compatível\n        resultados.append({\n            \"json\": {\n                \"nome\": cliente[\"nome\"],\n                \"email\": cliente[\"email\"],\n                \"perfil\": perfil_cliente,\n                \"saldo_texto\": saldo_texto,\n                \"saldo_num\": saldo_num,\n                \"recomendação\": {\n                    \"perfil\": investimento[\"perfil\"],\n                    \"produto\": investimento[\"produto\"],\n                    \"minimo\": minimo,\n                    \"rentabilidade\": investimento[\"rentabilidade\"],\n                    \"habilitado\": habilitado,\n                    \"mensagem\": mensagem\n                }\n            }\n        })\n\nreturn resultados\n"
+      },
+      "id": "8e3f142e-856a-4833-80aa-3d231253b78d",
+      "name": "Code in Python1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "\nresultados = []\n\ncopy_rules = {\n    \"idioma\": \"pt-br\",\n    \"tom\": \"amigável e profissional\",\n    \"tamanho\": \"curto (4-6 linhas)\",\n    \"evitar\": [\n        \"promessas de ganho\",\n        \"garantias\",\n        \"linguagem agressiva\"\n    ]\n}\n\nfor item in _items:\n    dados = item[\"json\"]\n    investimento = dados[\"recomendação\"]\n\n    minimo = investimento[\"minimo\"]\n    minimo_formatado = format(minimo, \",.2f\")\n    minimo_formatado = (\n        minimo_formatado\n        .replace(\",\", \"X\")\n        .replace(\".\", \",\")\n        .replace(\"X\", \".\")\n    )\n\n    mensagem_base = (\n        f\"{dados['nome']}, indo direto ao ponto: para o perfil \"\n        f\"{dados['perfil']}, **{investimento['produto']} \"\n        f\"(mínimo R$ {minimo_formatado}). Você tem \"\n        f\"{dados['saldo_texto']}, então \"\n    )\n\n    if investimento[\"habilitado\"] == \"sim\":\n        mensagem_base += \"dá para aplicar. \"\n    else:\n        mensagem_base += \"ainda não dá para aplicar. \"\n\n    mensagem_base += (\n        f\"Rentabilidade: {investimento['rentabilidade']}.\"\n    )\n\n    resultados.append({\n        \"json\": {\n            \"email_to\": dados[\"email\"],\n            \"nome\": dados[\"nome\"],\n            \"perfil\": dados[\"perfil\"],\n            \"saldo_texto\": dados[\"saldo_texto\"],\n            \"saldo_num\": dados[\"saldo_num\"],\n            \"recomendacao\": {\n                \"perfil\": investimento[\"perfil\"],\n                \"produto\": investimento[\"produto\"],\n                \"minimo\": investimento[\"minimo\"],\n                \"rentabilidade\": investimento[\"rentabilidade\"]\n            },\n            \"habilitado\": investimento[\"habilitado\"],\n            \"mensagem_base\": mensagem_base,\n            \"copy_rules\": copy_rules.copy()\n        }\n    })\n\nreturn resultados\n"
+      },
+      "id": "07e1dcb4-8a01-4be2-a697-2e18ac67bd53",
+      "name": "Code in Python2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "5e7a42a7-e09d-47f9-96a6-e636d8c07e8c",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1024,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Escreva um e-mail curto em pt-br para o cliente abaixo, sem prometer ganhos e sem garantias:\n\nCliente:\nNome:  {{ $json.nome }}\nPerfil: {{ $json.perfil }}\nSaldo: {{ $json.saldo_texto }}\n\nRecomendação:\nProduto: {{ $json.recomendacao.produto }}\nMínimo: {{ $json.recomendacao.minimo }}\nRentabilidade: {{ $json.recomendacao.rentabilidade }}\nHabilitado: {{ $json.habilitado }}\n\nRetorne APENAS JSON com:\n{\n    \"subject\": \"...\",\n    \"text_body\": \"...\",\n    \"html_body\": \"...\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        -288
+      ],
+      "id": "3bd7b32f-d6e7-4a6e-a3d7-96e91d2159aa",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in Python",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in Python": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in Python1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in Python1": {
+      "main": [
+        [
+          {
+            "node": "Code in Python2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in Python2": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "cbfbc024-dc7e-4e32-a4be-bf2a1dd7a204",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "73fb228a339e84846802adb693fd99831703786268ff5ed3bb11f07c6dcf6782"
+  },
+  "nodeGroups": [],
+  "id": "a2fOpz5E4qyBCa7D",
+  "tags": []
+}
